@@ -5,6 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.config.database import engine#, engine_mariadb
 from app.config.config import DATABASE_URL2  # DB 설정 파일에서 불러오기
 import pandas as pd
+import numpy as np
 import joblib
 import os
 
@@ -13,7 +14,8 @@ import requests
 
 model_path = '/app/pkl/LightGBM_250226.pkl'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # scheduler.py의 디렉터리
-MODEL_PATH = os.path.join(BASE_DIR, '..', 'pkl', 'LightGBM_SMOTE.pkl')
+MODEL_PATH = os.path.join(BASE_DIR, '..', 'pkl', 'LightGBM_tunning_250819.pkl')
+#MODEL_PATH = os.path.join(BASE_DIR, '..', 'pkl', 'LightGBM_SMOTE.pkl')
 
 def get_control():
     import warnings
@@ -63,15 +65,23 @@ def get_control():
         
             # 모델 예측 및 필요 결과값 출력
             pred = model.predict(data_process.drop(['date', 'hour'], axis=1))
-            pred_proba = model.predict_proba(data_process.drop(['date', 'hour'], axis=1))
-            data_process[['probability_0', 'probability_1', 'probability_2']] = pred_proba
-            data_process['pred'] = pred
+            pred_proba = model.predict_proba(data_process.drop(['date', 'hour'], axis=1))      
+            pred_proba_np = np.array(pred_proba)
+
+            flattened_proba = pred_proba_np.flatten()
+            
+            probability_columns = [f'probability{group}_{index}h'
+                     for index in range(1, 4)
+                     for group in range(0, 3)]
+            
+            data_process[probability_columns] = flattened_proba            
+            data_process[['pred_1h', 'pred_2h', 'pred_3h']] = pred[0]
             data_process['tp'] = data_process[['control_s', 'control_l']].max(axis=1)            
             data_process['min'] = data[0]["reg_date"].minute
             #"min": [data[0]["reg_date"].minute],
 
             insert_control_data(conn, data_process)
-            print(data_process)
+            #print(data_process)
 
 
 def get_add_data():
